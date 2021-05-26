@@ -8,34 +8,27 @@ import VideoCanvas from '../VideoCanvas/VideoCanvas'
 import AreYouSurePopup from '../Popup/AreYouSurePopup'
 import WrtcConnection from '../WRTC/WrtcConnection'
 
-
-// the "thumbnail" component is a small webRTC video, with some controls. They are the children of a .map() function.
 function ThumbNail({
     participantInfo = { muted: false },
-    thumbnail, // an object 
-    // example thumbnail :
-    //{
-    //     joinTime: 1617049882191,
-    //     meetingId: '5689816050040832',
-    //     memberID: '5689816050040832',
-    //     name: 'test1',
-    //     roll: 'controller',
-    // }
-    index, // the key from the .map()
-    fs, //boolean: whether or not this video is fullscreen
-    fb, //boolean: whether or not this video is full browser size
-    toggleFB, //function: make full browser size or exit full browser size
-    toggleFS, //function: mae fullscreen or exit fullscreen
-    thumbnailClick, //function to display video information
-    w, //element width
-    h, //element height
-    renderVideo,  // asyncronous function to attach video to a canvas element
-    removeUser, // asyncronous function to kick a user
-    muteUser, // asyncronous function to mute a user
-    unmuteUser, // asyncronous function to unmute a user 
-    startUserVideo,// asyncronous function to unpause video
-    stopUserVideo,// asyncronous function to pause video
-    meetingId, //string: unique meeting identifier
+    thumbnail,
+    index,
+    fs,
+    fb,
+    toggleFB,
+    toggleFS,
+    thumbnailClick,
+    w,
+    h,
+    renderVideo,
+    me,
+    removeUser,
+    muteUser,
+    unmuteUser,
+    startUserVideo,
+    stopUserVideo,
+    userRecordToggle,
+    stopRender,
+    meetingId,
 }) {
     //editable title
     const [videoTitle, setVideoTitle] = useState(thumbnail.name)
@@ -43,13 +36,16 @@ function ThumbNail({
     const [showHangupConfirmation, setShowHangupConfirmation] = useState(false)
     //is component mounted?
     const [canvasConnected, setCanvasConnected] = useState(false)
+    //microphone icon
+    const [isMic, setIsMic] = useState(false)
+    //camera icon
+    const [isCam, setIsCam] = useState(false)
     //record icon
     const [isRec, setIsRec] = useState(false)
-
-    //once rendered, connect video data to html canvas by calling renderVideo. Set canvasConnected boolean to prevent re-running
     useEffect(() => {
         const elem = document.getElementById('thumbnail_' + thumbnail.memberID)
         if (!canvasConnected) {
+            console.log('in useEffect')
             // let renderVideoPromise = renderVideo(thumbnail.memberID, elem)
             let renderVideoPromise = renderVideo(thumbnail.memberID, elem, 0)
             renderVideoPromise.then((response) => {
@@ -57,7 +53,6 @@ function ThumbNail({
             })
         }
     })
-    //webRTC connection information 
     const HOST_RECORDER = 'https://rec.nobrolla.com/'
     const HOST_SIGNAL = 'https://signal.nobrolla.com/'
 
@@ -87,45 +82,54 @@ function ThumbNail({
                         thumbnailClick(
                             2,
                             thumbnail.memberID,
-                            thumbnail.name
+                            me ? thumbnail.name + '(me)' : thumbnail.name
+                        )
+                    }
+                    onClick={(e) =>
+                        thumbnailClick(
+                            0,
+                            thumbnail.memberID,
+                            me ? thumbnail.name + '(me)' : thumbnail.name
                         )
                     }
                     style={{
-                        width: w, // width was calculated by parent component because the number of thumbnails varies
+                        width: w,
                     }}
                 >
                     <VideoCanvas
                         className={'thumbnails ' + thumbnail.videoObject}
                         id={'thumbnail_' + thumbnail.memberID}
-                        height={h + 'px'} //height was calculated by parent component based on page layout
+                        height={h + 'px'}
                         width={w}
                         toggleFB={(e) =>
                             toggleFB(
                                 thumbnail.memberID,
-                                thumbnail.name
+                                me ? thumbnail.name + '(me)' : thumbnail.name
                             )
                         }
                         toggleFS={(e) =>
                             toggleFS(
                                 thumbnail.memberID,
-                                thumbnail.name
+                                me ? thumbnail.name + '(me)' : thumbnail.name
                             )
                         }
                         fs={fs}
                         fb={fb}
-                        title={thumbnail.name}
+                        title={me ? thumbnail.name + ' (me)' : thumbnail.name}
                         userID={thumbnail.memberID}
                         titleChange={(text) => setVideoTitle(text)}
+                        stopRender={stopRender}
                     />
                 </div>
             </div>
+            {/* {!me && ( */}
             <div className={'thumbnailBtnCon'}>
                 <div
                     className={'thumbnailBtn thumbnailMute'}
                     title={'Mute ' + videoTitle}
                     onClick={() => toggleMute(thumbnail.memberID)}
                 >
-                    <MicrophoneIcon //Icon components are .svgs with variable settings like color, whether to put a slash through them, etc
+                    <MicrophoneIcon
                         height={'24'}
                         width={'24'}
                         off={participantInfo.muted}
@@ -158,10 +162,11 @@ function ThumbNail({
                     title={'Hang up ' + videoTitle}
                     onClick={() => setShowHangupConfirmation(true)}
                 >
-                    <PhoneHandset height={'24'} width={'24'} fill={'red'} /> 
+                    <PhoneHandset height={'24'} width={'24'} fill={'red'} />
                 </div>
             </div>
-            {showHangupConfirmation && ( // areYouSurePopup is a fullscreen modal with a confirmation window. showHangUpConfirmation is a boolean.
+            {/* )} */}
+            {showHangupConfirmation && (
                 <AreYouSurePopup
                     title="Please Confirm"
                     message={
@@ -193,8 +198,6 @@ function ThumbNail({
             mutePromise.then((response) => {
                 if (response === 0) {
                     console.log('do unmute on ' + memberID)
-                    //I know an if with nothing but a console is poor form, but it was expected that there would be a call back in here,
-                    // unfortunately we haven't gotten this far
                 }
             })
         } else if (!participantInfo.muted) {
@@ -222,8 +225,16 @@ function ThumbNail({
                 }
             })
         }
+        // let videoMutePromise = userVideoToggle(true, memberID)
+        // videoMutePromise.then((response) => {
+        //     if (response === 0) {
+        //         console.log('toggle video on ' + memberID)
+        //         setIsCam(!isCam)
+        //     }
+        // })
     }
     async function toggleRecord() {
+        console.log('in here')
         if (isRec) {
             peerConnection?.close()
         } else {
@@ -233,4 +244,5 @@ function ThumbNail({
     }
 }
 
-export default React.memo(ThumbNail) //memoization prevented the video from triggering re-renders.
+// export default React.memo(ThumbNail)
+export default ThumbNail
